@@ -77,11 +77,6 @@ To check out the PyBrain repository run::
 If you are unfamiliar with git, there is also a direct download to the latest
 version `here <http://github.com/pybrain/pybrain/tarball/master>`_.
 
-Change into the directory Pybrain directory after either checking out got or
-downloading and extracting the archive. There you run (possibly as a superuser)
-
-   $ git clone git@github.com:pybrain/pybrain.git pybrain
-   
 Change into the directory Pybrain directory after either checking out got or 
 downloading and extracting the archive. There you run (possibly as a superuser 
 again on Unix systems)::
