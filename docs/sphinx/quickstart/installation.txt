@@ -92,5 +92,9 @@ import PyBrain. You should see something like this::
    Type "help", "copyright", "credits" or "license" for more information.
    >>> import pybrain
    >>>
+<<<<<<< HEAD:docs/sphinx/quickstart/installation.txt
    
+=======
+
+>>>>>>> Added download link from github to the docs.:docs/sphinx/quickstart/installation.txt
 If this works, you are set.
