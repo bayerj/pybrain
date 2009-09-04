@@ -29,6 +29,14 @@ class JsonSerializationTest(unittest.TestCase):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer)
     self.assert_(self.jsonInvariance(n))
 
+  def testRecurrent(self):
+    n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer, recurrent=True)
+    self.assert_(self.jsonInvariance(n))
+
+  def testArac(self):
+    n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer,
+                     fast=True)
+    self.assert_(self.jsonInvariance(n))
 
 
 if __name__ == "__main__":

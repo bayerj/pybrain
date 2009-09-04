@@ -1,22 +1,137 @@
 #! /usr/bin/env python2.5
 # -*- coding: utf-8 -*-
 
-__author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
-
 
 from __future__ import with_statement
 
 
+__author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
+
+
+import itertools
+
+try:
+  import json
+except ImportError, e:
+  try:
+    import simplejson as json
+  except ImportError, e:
+    raise ImportError("Need simplejson or python2.6")
+
+
+import arac
+import pybrain
+from pybrain.structure.modules.module import Module
+from pybrain.structure.connections.connection import Connection
+from pybrain.structure.parametercontainer import ParameterContainer
+from pybrain.structure import (Network, SigmoidLayer, TanhLayer, LinearLayer,
+                               LSTMLayer, MDLSTMLayer, IdentityConnection,
+                               FullConnection, LinearConnection, BiasUnit)
+from pybrain.utilities import canonicClassString, multimethod
+
+
+@multimethod(BiasUnit)
+@multimethod(LinearLayer)
+@multimethod(TanhLayer)
+@multimethod(SigmoidLayer)
+@multimethod(LSTMLayer)
+@multimethod(MDLSTMLayer)
+def dictRepresentation(obj):
+  """Return the representation of a pybrain structure object as a python
+  dict."""
+  dct = {'class': canonicClassString(obj),
+          'args': obj.argdict,
+          'name': obj.name }
+  if isinstance(obj, ParameterContainer):
+    dct['parameters'] = obj.params.tolist()
+  return dct
+
+
+@multimethod(IdentityConnection)
+@multimethod(LinearConnection)
+@multimethod(FullConnection)
+def dictRepresentation(obj):
+  argdict = obj.argdict.copy()
+  # These objects are not JSON serializable, thus they have to be excluded.
+  del argdict['inmod']
+  del argdict['outmod']
+  dct = {'class': canonicClassString(obj),
+         'args': argdict,
+         'name': obj.name,
+         'inmod': obj.inmod.name,
+         'outmod': obj.outmod.name, }
+  if isinstance(obj, ParameterContainer):
+    dct['parameters'] = obj.params.tolist()
+  return dct
+
+
 def writeToFileObject(net, fileobject):
   """Return a network that was read from a file-like object in JSON format."""
-  # First serialzie all the modules of the network in a recursive fashion.
+  # Check if the network is a nested network. If so, throw an error, since
+  # serializing those is net yet supported.
+  if any(isinstance(i, Network) for i in net.modules):
+    raise ValueError("JSON serialization for nested networks not supported.")
+  # We will represent a network as a dictionary first which will then be
+  # serialized by a call to the JSON library.
+  mods = [dictRepresentation(i) for i in net.modules]
+  cons = itertools.chain(*net.connections.values())
+  cons = [dictRepresentation(i) for i in cons]
+  inmods = [i.name for i in net.inmodules]
+  outmods = [i.name for i in net.outmodules]
+  
+  netdict = {
+    'name': net.name,
+    'class': canonicClassString(net),
+    'inmodules': inmods,
+    'outmodules': outmods,
+    'modules': mods,
+    'connections': cons,
+  }
+
   # Then serialize connections and use module ids as inmodule/outmodule specs.
-  pass
+  json.dump(netdict, fileobject, indent=2)
 
 
 def readFromFileObject(fileobject):
   """Write a network to a file-like object in JSON format."""
-  pass
+  dct = json.load(fileobject)
+
+  # First recover modules.
+  mods = []
+  for i in dct['modules']:
+    args = dict((str(k), v) for k, v in i['args'].items())
+    mod = eval(i['class'])(**args) 
+    if 'parameters' in i:
+      mod.params[:] = i['parameters']
+    mods.append(mod)
+  mods = dict((i.name, i) for i in mods)
+
+  # Then recover connections.
+  cons = []
+  for i in dct['connections']:
+    # Replace names of modules by their new instances.
+    i['args']['inmod'] = mods[i['inmod']]
+    i['args']['outmod'] = mods[i['outmod']]
+    args = dict((str(k), v) for k, v in i['args'].items())
+    args['name'] = i['name']
+    con = eval(i['class'])(**args)
+    if 'parameters' in i:
+      con.params[:] = i['parameters']
+    cons.append(con)
+
+  net = eval(dct['class'])(name=dct['name'])
+  for name, mod in mods.items():
+    net.addModule(mod)
+    if mod.name in dct['inmodules']:
+      net.addInputModule(mod)
+    if mod.name in dct['outmodules']:
+      net.addOutputModule(mod)
+
+  for con in cons:
+    net.addConnection(con)
+
+  net.sortModules()
+  return net
 
 
 def writeToFile(net, filename):
