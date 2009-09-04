@@ -78,6 +78,8 @@ def netCompare(net1, net2, forwardpasses=1, verbose=False):
         if verbose:
             print 'Same representation'
     else:
+        if verbose:
+            print 'Different representation'
         identical = False
         if verbose:
             print net2
@@ -97,6 +99,8 @@ def netCompare(net1, net2, forwardpasses=1, verbose=False):
         if verbose:
             print 'Same function'
     else:
+        if verbose:
+            print 'Different function'
         identical = False
         if verbose:
             print outN
@@ -108,10 +112,11 @@ def netCompare(net1, net2, forwardpasses=1, verbose=False):
     else:        
         identical = False
         if verbose:
+            print "Different class"
             print net2.__class__
             print net1.__class__
 
-    return False
+    return identical 
 
 
 def xmlInvariance(n, forwardpasses = 1):
