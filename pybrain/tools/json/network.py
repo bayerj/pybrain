@@ -19,7 +19,7 @@ except ImportError, e:
     raise ImportError("Need simplejson or python2.6")
 
 
-import arac
+import arac.pybrainbridge
 import pybrain
 from pybrain.structure.networks.recurrent import RecurrentNetworkComponent
 from pybrain.structure.modules.module import Module
@@ -46,9 +46,10 @@ from pybrain.utilities import canonicClassString, multimethod
 def dictRepresentation(obj):
   """Return the representation of a pybrain structure object as a python
   dict."""
+  argdict = obj.argdict.copy()
+  argdict['name'] = obj.name
   dct = {'class': canonicClassString(obj),
-          'args': obj.argdict,
-          'name': obj.name }
+          'args': argdict, }
   if isinstance(obj, ParameterContainer):
     dct['parameters'] = obj.params.tolist()
   return dct
@@ -62,9 +63,9 @@ def dictRepresentation(obj):
   # These objects are not JSON serializable, thus they have to be excluded.
   del argdict['inmod']
   del argdict['outmod']
+  argdict['name'] = obj.name
   dct = {'class': canonicClassString(obj),
          'args': argdict,
-         'name': obj.name,
          'inmod': obj.inmod.name,
          'outmod': obj.outmod.name, }
   if isinstance(obj, ParameterContainer):
@@ -115,16 +116,17 @@ def readFromFileObject(fileobject):
     if 'parameters' in i:
       mod.params[:] = i['parameters']
     mods.append(mod)
-  mods = dict((i.name, i) for i in mods)
+  mods = dict((str(i.name), i) for i in mods)
+
+  print mods
 
   # Then recover connections.
   cons = []
   for i in dct['connections']:
     # Replace names of modules by their new instances.
-    i['args']['inmod'] = mods[i['inmod']]
-    i['args']['outmod'] = mods[i['outmod']]
+    i['args']['inmod'] = mods[str(i['inmod'])]
+    i['args']['outmod'] = mods[str(i['outmod'])]
     args = dict((str(k), v) for k, v in i['args'].items())
-    args['name'] = i['name']
     con = eval(i['class'])(**args)
     if 'parameters' in i:
       con.params[:] = i['parameters']
