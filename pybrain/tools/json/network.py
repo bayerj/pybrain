@@ -21,12 +21,15 @@ except ImportError, e:
 
 import arac
 import pybrain
+from pybrain.structure.networks.recurrent import RecurrentNetworkComponent
 from pybrain.structure.modules.module import Module
 from pybrain.structure.connections.connection import Connection
 from pybrain.structure.parametercontainer import ParameterContainer
 from pybrain.structure import (Network, SigmoidLayer, TanhLayer, LinearLayer,
                                LSTMLayer, MDLSTMLayer, IdentityConnection,
-                               FullConnection, LinearConnection, BiasUnit)
+                               FullConnection, LinearConnection, BiasUnit,
+                               GateLayer, DoubleGateLayer, SwitchLayer,
+                               MultiplicationLayer)
 from pybrain.utilities import canonicClassString, multimethod
 
 
@@ -34,6 +37,10 @@ from pybrain.utilities import canonicClassString, multimethod
 @multimethod(LinearLayer)
 @multimethod(TanhLayer)
 @multimethod(SigmoidLayer)
+@multimethod(GateLayer)
+@multimethod(DoubleGateLayer)
+@multimethod(MultiplicationLayer)
+@multimethod(SwitchLayer)
 @multimethod(LSTMLayer)
 @multimethod(MDLSTMLayer)
 def dictRepresentation(obj):
@@ -87,6 +94,10 @@ def writeToFileObject(net, fileobject):
     'modules': mods,
     'connections': cons,
   }
+  if isinstance(net, RecurrentNetworkComponent):
+    netdict['recurrentcons'] = [i.name for i in net.recurrentConns]
+    reccons = [dictRepresentation(i) for i in net.recurrentConns]
+    netdict['connections'] += reccons
 
   # Then serialize connections and use module ids as inmodule/outmodule specs.
   json.dump(netdict, fileobject, indent=2)
@@ -127,8 +138,15 @@ def readFromFileObject(fileobject):
     if mod.name in dct['outmodules']:
       net.addOutputModule(mod)
 
+  try:
+    recurrentcons = set(dct['recurrentcons'])
+  except KeyError:
+    recurrentcons = set()
   for con in cons:
-    net.addConnection(con)
+    if con.name in recurrentcons:
+      net.addRecurrentConnection(con)
+    else:
+      net.addConnection(con)
 
   net.sortModules()
   return net

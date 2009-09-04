@@ -23,7 +23,7 @@ class JsonSerializationTest(unittest.TestCase):
     writeToFileObject(net, fp)
     fp.seek(0)
     othernet = readFromFileObject(fp)
-    return netCompare(net, othernet)
+    return netCompare(net, othernet, forwardpasses=2, verbose=True)
 
   def testFeedForwardSigmoid(self):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer)
@@ -31,7 +31,16 @@ class JsonSerializationTest(unittest.TestCase):
 
   def testRecurrent(self):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer, recurrent=True)
+    n.addRecurrentConnection(FullConnection(n['in'], n['out']))
+    n.sortModules()
     self.assert_(self.jsonInvariance(n))
+
+  def testGate(self):
+    n = buildNetwork(2, 3, 1, hiddenclass=GateLayer, recurrent=True)
+    self.assert_(self.jsonInvariance(n))
+    n = buildNetwork(2, 3, 1, hiddenclass=DoubleGateLayer, recurrent=True)
+    self.assert_(self.jsonInvariance(n))
+
 
   def testArac(self):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer,
