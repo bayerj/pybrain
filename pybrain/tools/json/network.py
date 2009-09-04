@@ -155,7 +155,7 @@ def readFromFileObject(fileobject):
 def writeToFile(net, filename):
   """Write a network to a file in JSON format."""
   with open(filename, 'w+') as fp:
-    return writeToFileLike(net, fp)
+    return writeToFileObject(net, fp)
 
 
 def readFromFile(filename):
