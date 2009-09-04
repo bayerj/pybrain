@@ -12,7 +12,7 @@ import optparse
 import pylab
 
 from pybrain.datasets import SequentialDataSet
-from pybrain.tools.xml import NetworkReader
+from pybrain.tools.json.network import readFromFile
 
 
 def make_optparser():
@@ -33,30 +33,32 @@ def make_optparser():
   return parser
 
 
-def calcJacobian(network, sequence, inputindex, outputindex):
+def calcJacobian(network, seq, inputindex, outputindex, timestep):
   outputs = []
-  for i, item in enumerate(seq):
+  for i, item in enumerate(seq[0]):
     output = network.activate(item)
-    newoutput[:] = [0] * dataset.outdim
-    if i == options.timestep:
+    newoutput = [0] * len(output)
+    if i == timestep:
       newoutput[outputindex] = output[outputindex]
     outputs.append(newoutput)
   outputs.reverse()
   jacobian = []
   for o in outputs:
     deriv = network.backActivate(o)
-    jacobian.append(deriv)
+    jacobian.append(deriv[inputindex])
+  jacobian.reverse()
   return jacobian
 
 
 def main():
   options, args = make_optparser().parse_args()
-  network = NetworkReader.readFrom(options.networkfile)
+  network = readFromFile(options.networkfile)
   dataset = SequentialDataSet.loadFromFile(options.datafile)
   seq = dataset.getSequence(options.sequenceindex)
-  jacobian = calcJacobian(network, dataset, seq, options.inputindex,
-                          options.outputindex)
+  jacobian = calcJacobian(network, seq, options.inputindex,
+                          options.outputindex, options.timestep)
 
+  print jacobian
   pylab.plot(jacobian)
   pylab.show()
 
