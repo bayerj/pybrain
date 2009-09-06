@@ -29,6 +29,7 @@ from pybrain.structure import (Network, SigmoidLayer, TanhLayer, LinearLayer,
                                LSTMLayer, MDLSTMLayer, IdentityConnection,
                                FullConnection, LinearConnection, BiasUnit,
                                GateLayer, DoubleGateLayer, SwitchLayer,
+                               SoftmaxLayer,
                                MultiplicationLayer)
 from pybrain.utilities import canonicClassString, multimethod
 
@@ -37,6 +38,7 @@ from pybrain.utilities import canonicClassString, multimethod
 @multimethod(LinearLayer)
 @multimethod(TanhLayer)
 @multimethod(SigmoidLayer)
+@multimethod(SoftmaxLayer)
 @multimethod(GateLayer)
 @multimethod(DoubleGateLayer)
 @multimethod(MultiplicationLayer)
@@ -114,7 +116,13 @@ def readFromFileObject(fileobject):
     args = dict((str(k), v) for k, v in i['args'].items())
     mod = eval(i['class'])(**args) 
     if 'parameters' in i:
-      mod.params[:] = i['parameters']
+      try: 
+        mod.params[:] = i['parameters']
+      except Exception, e:
+        print mod.params.shape
+        print len(i['parameters'])
+        raise e
+
     mods.append(mod)
   mods = dict((str(i.name), i) for i in mods)
 
@@ -129,7 +137,16 @@ def readFromFileObject(fileobject):
     args = dict((str(k), v) for k, v in i['args'].items())
     con = eval(i['class'])(**args)
     if 'parameters' in i:
-      con.params[:] = i['parameters']
+      try: 
+        con.params[:] = i['parameters']
+      except Exception, e:
+        print con.inSliceFrom, con.inSliceTo, con.outSliceFrom, con.outSliceTo
+        print type(con)
+        print con.inmod
+        print con.outmod
+        print con.params.shape
+        print len(i['parameters'])
+        raise e
     cons.append(con)
 
   net = eval(dct['class'])(name=dct['name'])

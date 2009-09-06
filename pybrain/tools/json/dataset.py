@@ -1,32 +1,40 @@
 # -*- coding: utf-8 -*-
  
+
 __author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
 
 
-import json
+try:
+  import json
+except ImportError, e:
+  try:
+    import simplejson as json
+  except ImportError, e:
+    raise ImportError("Need simplejson or python2.6")
 
-from pybrain.datasets import SequentialDataSet
-
-
-def serialize(ds, filename):
-  if isinstance(ds, SequentialDataSet):
-    return serialize_sequential(ds, filename)
-  else:
-    raise ValueError("Unknown dataset type for JSON-serialization, %s" % type(ds))
-
-
-def unserializeSequential(filename):
-  data = json.load(file(filename))
-  ds = SequentialDataSet(data['indim'], data['outdim'])
-  for seq in data['sequences']:
-    ds.newSequence()
-    for sample, target in seq:
-      ds.addSample(sample, target)
-  return ds
+from pybrain.utilities import canonicClassString, multimethod
 
 
-def serializeSequential(ds, filename):
-  # Built up dictionary for serialization.
+def readFromFileObject(flo):
+  dct = json.load(flo)
+  return fromRepresentation(dct)
+
+
+def readFromFile(filename):
+  return readFromFileObject(open(filename))
+
+
+def writeToFileObject(ds, flo):
+  dct = toRepresentation(ds)
+  json.dump(dct, flo)
+
+
+def writeToFile(ds, filename):
+  writeToFileObject(ds, open(filename, 'w+'))
+
+
+@multimethod(SequentialDataSet)
+def toRepresentation(ds):
   data = {'type': 'SequentialDataSet',
           'indim': ds.indim,
           'outdim': ds.outdim,
@@ -34,5 +42,16 @@ def serializeSequential(ds, filename):
   for seq in ds:
     this_seq = [(s.tolist(), t.tolist()) for s, t in seq]
     data['sequences'].append(this_seq)
+  return data
 
-  json.dump(data, file(filename, 'w'))
+
+@multimethod(SequentialDataSet)
+def fromRepresentation(dct):
+  ds = SequentialDataSet(dct['indim'], dct['outdim'])
+  for seq in dct['sequences']:
+    ds.newSequence()
+    for sample, target in seq:
+      ds.addSample(sample, target)
+  return ds
+
+
