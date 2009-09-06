@@ -29,6 +29,14 @@ class JsonSerializationTest(unittest.TestCase):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer)
     self.assert_(self.jsonInvariance(n))
 
+  def testLinearConnection(self):
+    n = buildNetwork(2, 3, 2, hiddenclass=SigmoidLayer)
+    con = LinearConnection(n['in'], n['out'], inSliceFrom=1, inSliceTo=2, 
+                           outSliceFrom=0, outSliceTo=1)
+    n.addConnection(con)
+    n.sortModules()
+    self.assert_(self.jsonInvariance(n))
+
   def testRecurrent(self):
     n = buildNetwork(2, 3, 1, hiddenclass=SigmoidLayer, recurrent=True)
     n.addRecurrentConnection(FullConnection(n['in'], n['out']))
