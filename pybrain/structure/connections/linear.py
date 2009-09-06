@@ -15,12 +15,15 @@ class LinearConnection(Connection, ParameterContainer):
     with a parameter and adds it to the input of the outmodule."""
     
     def __init__(self, inmod, outmod, name=None, 
-                 inSliceFrom=0, inSliceTo=None, outSliceFrom=0, outSliceTo=None):
-        if inSliceTo is None:
-          inSliceTo = outmod.indim
-        size = inSliceTo - inSliceFrom
+                 inSliceFrom=0, inSliceTo=None, 
+                 outSliceFrom=0, outSliceTo=None):
+
+
         Connection.__init__(self, inmod, outmod, name,
                             inSliceFrom, inSliceTo, outSliceFrom, outSliceTo)
+        size = self.inSliceTo - self.inSliceFrom
+        if size != self.outSliceTo - self.outSliceFrom:
+          raise ValueError("LinearConnection slices have to be of equal size.")
         ParameterContainer.__init__(self, size)
         
     def _forwardImplementation(self, inbuf, outbuf):
