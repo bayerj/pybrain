@@ -21,7 +21,8 @@ except:
 
 class AutoEncoder(Encoder):
 
-  def __init__(self, indim, layers, outclass=LinearLayer, fast=False):
+  def __init__(self, indim, layers, outclass=LinearLayer, fast=False,
+               denoisify=False):
     """Create a new AutoEncoder.
 
     `indim` is an integer specifying the dimensionality of the data being
@@ -39,8 +40,12 @@ class AutoEncoder(Encoder):
     specified by `outclass` which defaults to LinearLayer.
 
     If `fast` is set to True, fast networks will be used.
-    """
+
+    To specify how many samples with gaussian-noise-perturberd data should be
+    used instead of the normal input data, `noisify` can be used. If normal data
+    should be used, set it to False, which is the default."""
     self.indim = indim
+    self.denoisify = denoisify
 
     # Build up network.
     n = _FeedForwardNetwork() if fast else FeedForwardNetwork()
@@ -64,7 +69,6 @@ class AutoEncoder(Encoder):
 
     previous.name = 'code'
 
-
     # Add layers for decoding. 
     for klass, dim in list(reversed(layers[:-1])) + [(outclass, indim)]:
       layer = klass(dim)
@@ -80,24 +84,37 @@ class AutoEncoder(Encoder):
     n.sortModules()
     self.network = n
 
-  def learn(self, dataset, learningrate=0.005, momentum=0.0):
+  def makeSupervisedDataset(self, dataset):
     # For normalization.
     self.maxis = dataset.data['sample'][:dataset.getLength()].max(axis=0)
     self.minis = dataset.data['sample'][:dataset.getLength()].min(axis=0)
 
     if dataset.getDimension('sample') != self.indim:
       raise ValueError("Dataset does not fit specified input dimension.")
+
     # Construct dataset with input == target.
     sds = SupervisedDataSet(self.indim, self.indim)
     for i in xrange(len(dataset)):
       sample = dataset.getLinked(i)[0]
       sample -= self.minis
       sample /= self.maxis - self.minis
-      sds.appendLinked(sample, sample)
+      if self.denoisify:
+        for _ in xrange(self.denoisify):
+          inpt = sample + scipy.random.random(sample.shape) * 0.1
+          sds.appendLinked(inpt, sample)
+      else:
+        sds.appendLinked(sample, sample)
+    return sds
+
+  def learn(self, dataset, learningrate=0.005, momentum=0.0):
+    sds = self.makeSupervisedDataset(dataset)
     self.network.randomize()
     trainer = BackpropTrainer(self.network, sds, 
                               learningrate=learningrate, momentum=momentum)
-    trainer.trainUntilConvergence(maxEpochs=100)
+    maxEpochs = 100
+    if self.denoisify:
+      maxEpochs /= self.denoisify
+    trainer.trainUntilConvergence(maxEpochs=maxEpochs)
 
   def encode(self, inpt):
     self.network.reset()
