@@ -108,5 +108,5 @@ class AutoEncoder(object):
     self.network.reset()
     self.network['code'].outputbuffer[0][:] = code
     res = self.network.activate([-1] * self.indim) * (self.maxis - self.minis)
-    res += self.minis()
-    return 
+    res += self.minis
+    return res
