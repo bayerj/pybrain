@@ -10,7 +10,7 @@ import scipy
 from pybrain.auxiliary.pca import pca
 
 
-class PcaCode(object):
+class PcaEncoder(object):
 
   def __init__(self, indim, latentDim):
     self.indim = indim

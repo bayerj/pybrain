@@ -4,11 +4,11 @@ __author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
 import unittest
 
 from pybrain.tests import runModuleTestSuite
-from pybrain.unsupervised.codes.pca import PcaCode
+from pybrain.unsupervised.encoders.pca import PcaEncoder
 from pybrain.datasets.unsupervised import UnsupervisedDataSet
 
 
-class TestPcaCode(unittest.TestCase):
+class TestPcaEncoder(unittest.TestCase):
 
   def setUp(self):
     data = [[2.5, 2.4], 
@@ -27,7 +27,7 @@ class TestPcaCode(unittest.TestCase):
       self.dataset.appendLinked(row)
 
   def testSimple(self):
-    code = PcaCode(2, 1)
+    code = PcaEncoder(2, 1)
     code.learn(self.dataset)
   
     self.assertEqual(code.encoding[0, 0], -0.67787339852801165)
@@ -39,7 +39,6 @@ class TestPcaCode(unittest.TestCase):
 
     self.assertEqual(decoded[0], 2.3712589640000026)
     self.assertEqual(decoded[1], 2.5187060083221686)
-  
 
 
 if __name__ == "__main__":
