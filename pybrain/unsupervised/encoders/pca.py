@@ -8,9 +8,10 @@ __author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
 import scipy
 
 from pybrain.auxiliary.pca import pca
+from pybrain.unsupervised.encoders.encoder import Encoder
 
 
-class PcaEncoder(object):
+class PcaEncoder(Encoder):
 
   def __init__(self, indim, latentDim):
     self.indim = indim

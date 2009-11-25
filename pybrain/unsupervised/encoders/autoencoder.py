@@ -11,6 +11,7 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.structure import TanhLayer, LinearLayer, FullConnection, BiasUnit
 from pybrain.datasets import SupervisedDataSet
+from pybrain.unsupervised.encoders.encoder import Encoder
 
 try:
   from arac.pybrainbridge import _FeedForwardNetwork
@@ -18,7 +19,7 @@ except:
   pass
 
 
-class AutoEncoder(object):
+class AutoEncoder(Encoder):
 
   def __init__(self, indim, layers, outclass=LinearLayer, fast=False):
     """Create a new AutoEncoder.
@@ -96,7 +97,7 @@ class AutoEncoder(object):
     self.network.randomize()
     trainer = BackpropTrainer(self.network, sds, 
                               learningrate=learningrate, momentum=momentum)
-    trainer.trainUntilConvergence(maxEpochs=10)
+    trainer.trainUntilConvergence(maxEpochs=100)
 
   def encode(self, inpt):
     self.network.reset()
