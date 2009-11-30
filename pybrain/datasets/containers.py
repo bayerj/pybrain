@@ -6,6 +6,7 @@ __author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
 
 
 import itertools
+import struct
 import threading
 
 import scipy
@@ -111,6 +112,44 @@ class NumpySequencesContainer(NumpyVectorsContainer):
     self.fill += seqlength
 
 
+class ExternalVectorsContainer(object):
+
+  # Allow files up to this size in bytes.
+  max_file_size = 128 * 1024 * 1024
+
+  # Allow so many doubles per file.
+  max_doubles_per_file = max_file_size / 8
+
+  # Maximum number of simultaneously opened files.
+  max_files_open = 16
+
+  doublesize = struct.calcsize('d')
+
+  def __init__(self, dim):
+    self.dim = dim
+    self.itemsPerFile = max_doubles_per_file / dim
+    self.files = []
+
+  def __getitem__(self, idx):
+    # Determine the file the vector resides in.
+    fileidx, offset = divmod(idx, self.itemsPerFile)
+    filename = self.files[fileidx]
+    with open(filename) as fp:
+      fp.seek(offset * self.doublesize)
+      buffer = fp.read(self.dim * self.doublesize)
+    item = scipy.frombuffer(buffer, 'float64')
+    return item
+
+  def append(self, item):
+    # Check size of last file.
+    if not os.path.getsize(files[-1]) < self.max_file_size:
+      # We need to create a new file.
+      # I stopped working right here... ..
+      # ....
+
+
+
+
 containerRegistry = {
   (Vectors, 'numpy'): NumpyVectorsContainer,
   (Scalars, 'numpy'): NumpyScalarsContainer,
@@ -120,5 +159,8 @@ containerRegistry = {
   (Scalars, 'list'): lambda _: list(),
   (Sequences, 'list'): lambda _: list(),
 }
+
+
+
 
 
