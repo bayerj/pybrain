@@ -49,7 +49,12 @@ class DataSet(object):
     The used container type can be specified by `containertype`."""
     # We have to keep this to have an ordering of the fields.
     self._fields = []
-    for size, (name, spec) in zip(sizes, self._fieldspecs):
+    sizes = iter(sizes)
+    for name, spec in self._fieldspecs:
+      if type(spec) == Scalars:
+        size = 1
+      else:
+        size = sizes.next()
       field = containerRegistry[type(spec), containertype](size)
       self._fields.append(field)
       setattr(self, name, field)

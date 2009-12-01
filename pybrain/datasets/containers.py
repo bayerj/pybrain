@@ -86,7 +86,7 @@ class NumpyScalarsContainer(NumpyVectorsContainer):
 
   def __init__(self):
     """Create a NumpyScalarsContainer object."""
-    super(NumpyVectorsContainer, self).__init__(1)
+    super(NumpyScalarsContainer, self).__init__(1)
 
   def append(self, item):
     """Append a scalar to the container."""
@@ -166,7 +166,6 @@ class ExternalVectorsContainer(object):
     item = scipy.asarray(item, dtype='float64')
     with self.fileForAppend(self.dim) as fd:
       fwrite(fd, self.dim, item)
-    print os.path.getsize(self.files[-1])
 
 
 class ExternalScalarsContainer(ExternalVectorsContainer):
@@ -175,10 +174,10 @@ class ExternalScalarsContainer(ExternalVectorsContainer):
     super(ExternalScalarsContainer, self).__init__(1)
 
   def __getitem__(self, idx):
-    super(ExternalVectorsContainer, self)[idx][0]
+    return super(ExternalScalarsContainer, self).__getitem__(idx)[0]
 
   def append(self, item):
-    super(ExternalVectorsContainer, self).append([item])
+    super(ExternalScalarsContainer, self).append([item])
 
 
 class ExternalSequencesContainer(ExternalVectorsContainer):
@@ -206,15 +205,12 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
       # Determine the indexes of the files that are in the same file before this
       # sequence.
       precedSeqs = [i for i in self.fileToSequences[fileidx] if i < idx]
-      print self.fileToSequences
-      print "Predeceeding sequences", precedSeqs
       # Calculate the offset in the file.
       seq_offset = sum(self.sequenceToLengths[i] * self.dim for i in precedSeqs)
       # Seek to that offset...
       fp.seek(self.doublesize * seq_offset)
       # ... and return the corresponding sequence.
       res = fread(fp, self.sequenceToLengths[idx] * self.dim, 'd')
-      print "reading", res, "from", self.doublesize * seq_offset
     res.shape = res.size / self.dim, self.dim
 
     return res
@@ -222,7 +218,6 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
   def append(self, item):
     item = scipy.asarray(item, dtype='float64')
     with self.fileForAppend(item.size) as fd:
-      print "writing", item, "to", fd.tell()
       fwrite(fd, item.size, item)
 
     fileidx = len(self.files) - 1
@@ -233,7 +228,7 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
 
 containerRegistry = {
   (Vectors, 'numpy'): NumpyVectorsContainer,
-  (Scalars, 'numpy'): NumpyScalarsContainer,
+  (Scalars, 'numpy'): lambda _: NumpyScalarsContainer(),
   (Sequences, 'numpy'): NumpySequencesContainer,
   
   (Vectors, 'list'): lambda _: list(),
@@ -241,7 +236,7 @@ containerRegistry = {
   (Sequences, 'list'): lambda _: list(),
   
   (Vectors, 'external'): ExternalVectorsContainer,
-  (Scalars, 'external'): ExternalScalarsContainer,
+  (Scalars, 'external'): lambda _: ExternalScalarsContainer(),
   (Sequences, 'external'): ExternalSequencesContainer,
 }
 
