@@ -59,6 +59,11 @@ class TestNumpyContainerType(TestListDataSet):
   containertype = 'numpy'
 
 
+class TestExternalContainerType(TestListDataSet):
+
+  containertype = 'external'
+
+
 if __name__ == "__main__":
     runModuleTestSuite(__import__('__main__'))
 

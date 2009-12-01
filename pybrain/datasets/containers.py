@@ -5,11 +5,15 @@
 __author__ = 'Justin S Bayer, bayer.justin@googlemail.com'
 
 
+import collections
 import itertools
+import os
 import struct
+import tempfile
 import threading
 
 import scipy
+from scipy.io.numpyio import fread, fwrite
 
 
 class FieldType(object): 
@@ -24,8 +28,13 @@ class FieldType(object):
     with self._field_id_lock:
       self._ticket = self._field_ids.next()
 
+
 class Vectors(FieldType): pass
+
+
 class Scalars(FieldType): pass
+
+
 class Sequences(FieldType): pass
 
 
@@ -120,34 +129,106 @@ class ExternalVectorsContainer(object):
   # Allow so many doubles per file.
   max_doubles_per_file = max_file_size / 8
 
-  # Maximum number of simultaneously opened files.
-  max_files_open = 16
-
   doublesize = struct.calcsize('d')
 
   def __init__(self, dim):
     self.dim = dim
-    self.itemsPerFile = max_doubles_per_file / dim
+    self.itemsPerFile = self.max_doubles_per_file / dim
     self.files = []
+
+  def __del__(self):
+    for f in self.files:
+      os.remove(f)
 
   def __getitem__(self, idx):
     # Determine the file the vector resides in.
     fileidx, offset = divmod(idx, self.itemsPerFile)
     filename = self.files[fileidx]
-    with open(filename) as fp:
-      fp.seek(offset * self.doublesize)
-      buffer = fp.read(self.dim * self.doublesize)
-    item = scipy.frombuffer(buffer, 'float64')
-    return item
+    with open(filename) as fd:
+      fd.seek(offset * self.doublesize)
+      item = fread(fd, self.dim, 'd')
+      return item
+
+  def fileForAppend(self, needed):
+    filesize = os.path.getsize(self.files[-1]) if self.files else float('inf')
+    if filesize + needed * self.doublesize >= self.max_file_size:
+      # We need to create a new file if the previous file is approaching the
+      # upper file limit.
+      _fd = tempfile.NamedTemporaryFile('w', delete=False)
+      fd = open(_fd.name, 'r+')
+      self.files.append(fd.name)
+    else:
+      fd = open(self.files[-1], 'r+')
+      fd.seek(0, 2)
+    return fd
 
   def append(self, item):
-    # Check size of last file.
-    if not os.path.getsize(files[-1]) < self.max_file_size:
-      # We need to create a new file.
-      # I stopped working right here... ..
-      # ....
+    item = scipy.asarray(item, dtype='float64')
+    with self.fileForAppend(self.dim) as fd:
+      fwrite(fd, self.dim, item)
+    print os.path.getsize(self.files[-1])
 
 
+class ExternalScalarsContainer(ExternalVectorsContainer):
+
+  def __init__(self):
+    super(ExternalScalarsContainer, self).__init__(1)
+
+  def __getitem__(self, idx):
+    super(ExternalVectorsContainer, self)[idx][0]
+
+  def append(self, item):
+    super(ExternalVectorsContainer, self).append([item])
+
+
+class ExternalSequencesContainer(ExternalVectorsContainer):
+
+  @property
+  def fill(self):
+    return len(self.sequenceToFiles)
+
+  def __init__(self, dim):
+    super(ExternalSequencesContainer, self).__init__(dim)
+
+    # Mapping of a sequence to its file index.
+    self.sequenceToFiles = []     
+
+    # Mapping of a sequence to its lengths.
+    self.sequenceToLengths = []     
+    
+    # Mapping of a filename to the sequence indices that it contains.
+    self.fileToSequences = collections.defaultdict(lambda: [])
+
+  def __getitem__(self, idx):
+    fileidx = self.sequenceToFiles[idx]
+    filename = self.files[fileidx]
+    with open(filename, 'r') as fp:
+      # Determine the indexes of the files that are in the same file before this
+      # sequence.
+      precedSeqs = [i for i in self.fileToSequences[fileidx] if i < idx]
+      print self.fileToSequences
+      print "Predeceeding sequences", precedSeqs
+      # Calculate the offset in the file.
+      seq_offset = sum(self.sequenceToLengths[i] * self.dim for i in precedSeqs)
+      # Seek to that offset...
+      fp.seek(self.doublesize * seq_offset)
+      # ... and return the corresponding sequence.
+      res = fread(fp, self.sequenceToLengths[idx] * self.dim, 'd')
+      print "reading", res, "from", self.doublesize * seq_offset
+    res.shape = res.size / self.dim, self.dim
+
+    return res
+
+  def append(self, item):
+    item = scipy.asarray(item, dtype='float64')
+    with self.fileForAppend(item.size) as fd:
+      print "writing", item, "to", fd.tell()
+      fwrite(fd, item.size, item)
+
+    fileidx = len(self.files) - 1
+    self.sequenceToFiles.append(fileidx)
+    self.sequenceToLengths.append(item.shape[0])
+    self.fileToSequences[fileidx].append(len(self.sequenceToFiles) - 1)
 
 
 containerRegistry = {
@@ -158,6 +239,10 @@ containerRegistry = {
   (Vectors, 'list'): lambda _: list(),
   (Scalars, 'list'): lambda _: list(),
   (Sequences, 'list'): lambda _: list(),
+  
+  (Vectors, 'external'): ExternalVectorsContainer,
+  (Scalars, 'external'): ExternalScalarsContainer,
+  (Sequences, 'external'): ExternalSequencesContainer,
 }
 
 
