@@ -129,43 +129,69 @@ class ExternalVectorsContainer(object):
   # Allow so many doubles per file.
   max_doubles_per_file = max_file_size / 8
 
+  # Size of a double on this platform.
   doublesize = struct.calcsize('d')
 
-  def __init__(self, dim):
+  # Buffer size for files.
+  buffersize = 32 * 1024 * 1024 
+
+  def __init__(self, dim, datadir=".", keepFiles=False):
     self.dim = dim
     self.itemsPerFile = self.max_doubles_per_file / dim
     self.files = []
 
+    # To avoid reopening the same file again and again, we keep the last used
+    # file descriptor. This will hopefully be good enough for serial access and
+    # appending.
+    self._cur_filename = None
+    self._cur_fd = None
+
+    # If set to True, files will be kept over the lifetime of the object (And
+    # possibly the process!)
+    # TODO: establish serialization method instead.
+    self.keepFiles = keepFiles
+    self.datadir = datadir
+
   def __del__(self):
-    for f in self.files:
-      os.remove(f)
+    if self._cur_fd is not None:
+      self._cur_fd.close()
+    if not self.keepFiles:
+      for f in self.files:
+        os.remove(f)
 
   def __getitem__(self, idx):
     # Determine the file the vector resides in.
     fileidx, offset = divmod(idx, self.itemsPerFile)
     filename = self.files[fileidx]
-    with open(filename) as fd:
-      fd.seek(offset * self.doublesize)
-      item = fread(fd, self.dim, 'd')
-      return item
+    if filename != self._cur_filename:
+      self._cur_fd = open(filename)
+      self._cur_filename = filename
+    self._cur_fd.seek(offset * self.doublesize)
+    item = fread(self._cur_fd, self.dim, 'd')
+    return item
 
   def fileForAppend(self, needed):
     filesize = os.path.getsize(self.files[-1]) if self.files else float('inf')
     if filesize + needed * self.doublesize >= self.max_file_size:
       # We need to create a new file if the previous file is approaching the
       # upper file limit.
-      _fd = tempfile.NamedTemporaryFile('w', delete=False)
-      fd = open(_fd.name, 'r+')
-      self.files.append(fd.name)
-    else:
-      fd = open(self.files[-1], 'r+')
-      fd.seek(0, 2)
-    return fd
+      if self._cur_fd is not None:
+        self._cur_fd.close()
+      _fd = tempfile.NamedTemporaryFile('w', delete=False, dir=self.datadir)
+      self._cur_fd = open(_fd.name, 'a', self.buffersize)
+      self._cur_filename = _fd.name
+      self.files.append(_fd.name)
+    elif self._cur_filename != self.files[-1]:
+      self._cur_fd.close()
+      self._cur_fd = open(self.files[-1], 'a', self.buffersize)
+      self._cur_filename = self.files[-1]
+      #self._cur_fd.seek(0, 2)
+    return self._cur_fd
 
   def append(self, item):
     item = scipy.asarray(item, dtype='float64')
-    with self.fileForAppend(self.dim) as fd:
-      fwrite(fd, self.dim, item)
+    fd = self.fileForAppend(self.dim)
+    fwrite(fd, self.dim, item)
 
 
 class ExternalScalarsContainer(ExternalVectorsContainer):
@@ -217,8 +243,8 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
 
   def append(self, item):
     item = scipy.asarray(item, dtype='float64')
-    with self.fileForAppend(item.size) as fd:
-      fwrite(fd, item.size, item)
+    fd = self.fileForAppend(item.size)
+    fwrite(fd, self.dim, item)
 
     fileidx = len(self.files) - 1
     self.sequenceToFiles.append(fileidx)
