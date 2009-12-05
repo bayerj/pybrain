@@ -58,7 +58,6 @@ class LSTMLayer(NeuronLayer, ParameterContainer):
             ParameterContainer.__init__(self, dim*3)
             self._setParameters(self.params)
             self._setDerivatives(self.derivs)
-                    
         
     def _setParameters(self, p, owner = None):
         ParameterContainer._setParameters(self, p, owner)

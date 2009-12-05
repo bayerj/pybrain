@@ -33,7 +33,6 @@ class Network(Module, ParameterContainer):
     
     offset = property(__getOffset, __setOffset)
     
-    
     def __init__(self, name=None, **args):
         ParameterContainer.__init__(self, **args)
         self.name = name
