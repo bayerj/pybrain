@@ -126,3 +126,7 @@ class DataSet(object):
   def append(self, *items):
     for field, item in zip(self._fields, items):
       field.append(item)
+
+  def replaceNansByMeans(self):
+    for field in self._fields:
+      field.replaceNansByMeans()
