@@ -15,13 +15,6 @@ class Trainer(Named):
     def __init__(self, module):
         self.module = module    
     
-    def setData(self, dataset):
-        """Associate the given dataset with the trainer."""
-        self.ds = dataset
-        if dataset:
-            assert dataset.indim == self.module.indim
-            assert dataset.outdim == self.module.outdim
-        
     def trainOnDataset(self, dataset, *args, **kwargs):
         """Set the dataset and train. 
         

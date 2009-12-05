@@ -51,10 +51,12 @@ class BackpropTrainer(Trainer):
         self.module.resetDerivatives()
         errors = 0        
         ponderation = 0.
-        shuffledSequences = []
-        for seq in self.ds._provideSequences():
-            shuffledSequences.append(seq)
-        shuffle(shuffledSequences)
+
+        # Provide a shuffled batch.
+        indices = range(len(self.ds))
+        shuffle(indices)
+        shuffledSequences = (self.ds[i] for i in indices)
+
         for seq in shuffledSequences:
             e, p = self._calcDerivs(seq)
             errors += e
