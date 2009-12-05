@@ -18,3 +18,10 @@ class SequenceRegressionDataSet(DataSet):
 
   inputs = Sequences()
   targets = Sequences()
+
+
+class ImportanceSequenceRegressionDataSet(DataSet):
+
+  inputs = Sequences()
+  targets = Sequences()
+  importance = Sequences()
