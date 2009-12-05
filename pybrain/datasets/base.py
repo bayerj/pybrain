@@ -14,6 +14,10 @@ from pybrain.datasets.containers import (Vectors, Scalars, Sequences,
                                          containerRegistry)
 
 
+class OutOfSync(Exception):
+  pass
+
+
 class DataSetType(type):
   
   def __new__(cls, name, bases, attrs):
@@ -90,7 +94,7 @@ class DataSet(object):
 
   def __len__(self):
     if not self._checkSync():
-      raise OutOfSyncException("DataSet has unequal lengths for fields.")
+      raise OutOfSync("DataSet has unequal lengths for fields.")
     return len(self._fields[0])
 
   def __iter__(self):
