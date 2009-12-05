@@ -38,7 +38,14 @@ class Scalars(FieldType): pass
 class Sequences(FieldType): pass
 
 
-class NumpyVectorsContainer(object):
+class Container(object):
+
+  def __iter__(self):
+    for i in xrange(len(self)):
+      yield self[i]
+
+
+class NumpyVectorsContainer(Container):
 
   @property
   def data(self):
@@ -121,7 +128,7 @@ class NumpySequencesContainer(NumpyVectorsContainer):
     self.fill += seqlength
 
 
-class ExternalVectorsContainer(object):
+class ExternalVectorsContainer(Container):
 
   # Allow files up to this size in bytes.
   max_file_size = 128 * 1024 * 1024
