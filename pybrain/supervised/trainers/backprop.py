@@ -69,11 +69,10 @@ class BackpropTrainer(Trainer):
         if self.verbose:
             print "Total error:", errors / ponderation
         if self.batchlearning:
-            self.module._setParameters(self.descent(self.module.derivs))
+          self.module.params[:] = self.descent(self.module.derivs)
         self.epoch += 1
         self.totalepochs += 1
         return errors / ponderation
-        
     
     def _calcDerivs(self, seq):
         """Calculate error function and backpropagate output errors to yield 
