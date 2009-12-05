@@ -222,7 +222,7 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
     self.sequenceToLengths = []     
     
     # Mapping of a filename to the sequence indices that it contains.
-    self.fileToSequences = collections.defaultdict(lambda: [])
+    self.fileToSequences = collections.defaultdict(list)
 
   def __getitem__(self, idx):
     fileidx = self.sequenceToFiles[idx]
