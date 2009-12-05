@@ -80,7 +80,8 @@ class BackpropTrainer(Trainer):
     def _calcDerivs(self, seq):
         """Calculate error function and backpropagate output errors to yield 
         the gradient."""
-        self.module.reset()        
+        seq = zip(*seq)     # TODO: this should be done better, I guess.
+        self.module.reset()     
         for sample in seq:
             self.module.activate(sample[0])
         error = 0
