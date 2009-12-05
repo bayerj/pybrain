@@ -177,6 +177,11 @@ class ExternalVectorsContainer(Container):
     item = fread(self._cur_fd, self.dim, 'd')
     return item
 
+  def close(self):
+    self._cur_fd.close()
+    self._cur_fd = None
+    self._cur_filename = None
+
   def fileForAppend(self, needed):
     filesize = os.path.getsize(self.files[-1]) if self.files else float('inf')
     if filesize + needed * self.doublesize >= self.max_file_size:
