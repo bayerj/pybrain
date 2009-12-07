@@ -295,11 +295,69 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
     self.fileToSequences[fileidx].append(len(self.sequenceToFiles) - 1)
 
 
-class SharedVectorsContainer(Container):
-  pass
+class SharedVectorsContainer(ArrayContainer):
+
+  @property
+  def capacity(self):
+    return len(self._data)
+
+  def allocate(self, length):
+    new_data = multiprocessing.Array('d', length)
+    if self._data is not None:
+      new_data[:len(self._data)] = self._data
+    self._data = new_data
+
+  def __getitem__(self, idx):
+    item = self._data[idx * self.dim:(idx + 1) * self.dim]
+    item = scipy.asarray(item)
+    return item
 
 
+class SharedScalarsContainer(SharedVectorsContainer):
 
+  def __init__(self):
+    super(SharedScalarsContainer, self).__init__(1)
+
+  def __getitem__(self, idx):
+    item = super(SharedVectorsContainer, self).__getitem__(idx)
+    return item[0]
+
+  def append(self, item):
+    super(SharedVectorsContainer, self).append([item])
+
+
+class SharedSequencesContainer(SharedVectorsContainer):
+
+  def __init__(self, dim):
+    """Create a SharedSequencesContainer object."""
+    super(SharedSequencesContainer, self).__init__(dim)
+    self.sequenceStarts = []
+
+  def __getitem__(self, idx):
+    start = self.sequenceStarts[idx]
+    try: 
+      stop = self.sequenceStarts[idx + 1]
+    except IndexError:
+      stop = self.fill
+
+    start *= self.dim
+    stop *= self.dim
+
+    res = self._data[start:stop]
+    res = scipy.asarray(res)
+    res.shape = res.shape[0] / self.dim, self.dim
+    return res
+
+  def append(self, sequence):
+    """Append a sequence to the container."""
+    seqlength = len(sequence)
+    sequence = scipy.asarray(sequence)
+    while self.freeRows() < seqlength:
+      self.allocate(self.capacity * 2)
+    self._data[self.fill * self.dim:(self.fill + seqlength) * self.dim] = \
+        sequence.ravel()
+    self.sequenceStarts.append(self.fill)
+    self.fill += seqlength
 
 
 containerRegistry = {
@@ -314,6 +372,11 @@ containerRegistry = {
   (Vectors, 'external'): ExternalVectorsContainer,
   (Scalars, 'external'): lambda _: ExternalScalarsContainer(),
   (Sequences, 'external'): ExternalSequencesContainer,
+
+  (Vectors, 'shared'): SharedVectorsContainer,
+  (Scalars, 'shared'): lambda _: SharedScalarsContainer(),
+  (Sequences, 'shared'): SharedSequencesContainer,
+
 }
 
 

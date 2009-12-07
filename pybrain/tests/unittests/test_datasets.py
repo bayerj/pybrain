@@ -64,11 +64,12 @@ class TestListDataSet(unittest.TestCase):
     ds.targets.append([2])
     ds.importance.append(2)
 
+    self.assertEqual(ds.targets[0][0], 3)
+    self.assertEqual(ds.targets[1][0], 2)
+
     self.assertEqual(ds.inputs[0][0][0], 1)
     self.assertEqual(ds.inputs[0][0][1], 2)
     self.assertEqual(ds.inputs[1][1][1], 1)
-    self.assertEqual(ds.targets[0][0], 3)
-    self.assertEqual(ds.targets[1][0], 2)
     self.assertEqual(ds.importance[0], 1)
     self.assertEqual(ds.importance[1], 2)
 
@@ -82,6 +83,10 @@ class TestExternalContainerType(TestListDataSet):
 
   containertype = 'external'
 
+
+class TestSharedContainerType(TestListDataSet):
+
+  containertype = 'shared'
 
 if __name__ == "__main__":
     runModuleTestSuite(__import__('__main__'))
