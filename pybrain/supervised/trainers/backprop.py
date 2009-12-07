@@ -3,6 +3,17 @@ __author__ = 'Daan Wierstra and Tom Schaul'
 from scipy import dot, argmax
 from random import shuffle
 
+
+try: 
+  import multiprocessing # For python 2.6
+except ImportError:
+  try:
+    import pyprocessing # For python < 2.5
+  except ImportError:
+    # Fail silently.
+    pass
+
+
 from trainer import Trainer
 from pybrain.utilities import fListToString 
 from pybrain.auxiliary import GradientDescent
@@ -32,7 +43,7 @@ class BackpropTrainer(Trainer):
         decay at all.
         """
         Trainer.__init__(self, module)
-        self.setData(dataset)
+        self.ds = dataset
         self.verbose = verbose
         self.batchlearning = batchlearning
         self.weightdecay = weightdecay
@@ -45,6 +56,13 @@ class BackpropTrainer(Trainer):
         self.descent.alphadecay = lrdecay
         self.descent.init(module.params)
         
+    def shuffleInputs(self):
+        """Generator function that yields dataset entries in random order."""
+        indices = range(len(self.ds))
+        shuffle(indices)
+        for i in indices:
+          yield self.ds[i]
+
     def train(self):
         """Train the associated module for one epoch."""
         assert len(self.ds) > 0, "Dataset cannot be empty."
@@ -52,12 +70,7 @@ class BackpropTrainer(Trainer):
         errors = 0        
         ponderation = 0.
 
-        # Provide a shuffled batch.
-        indices = range(len(self.ds))
-        shuffle(indices)
-        shuffledSequences = (self.ds[i] for i in indices)
-
-        for seq in shuffledSequences:
+        for seq in self.shuffleInputs():
             e, p = self._calcDerivs(seq)
             errors += e
             ponderation += p
@@ -243,3 +256,20 @@ class BackpropTrainer(Trainer):
             print 'train-errors:', fListToString(trainingErrors, 6)
             print 'valid-errors:', fListToString(validationErrors, 6)
         return trainingErrors, validationErrors
+
+
+class ParallelBackpropTrainer(BackpropTrainer):
+
+    def __init__(self, network, dataset, processes=None):
+        super(ParallelBackpropTrainer, self).__init__(network, dataset)
+        self.pool = multiprocessing.Pool(processes)
+    
+    def _calcDerivs(self, network, dataset, indexes):
+      pass
+        
+    def train(self):
+      pass
+        
+
+
+
