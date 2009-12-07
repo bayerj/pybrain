@@ -64,8 +64,8 @@ class ArrayContainer(Container):
 
   def __init__(self, dim):
     self.dim = dim
-    self._data = scipy.empty((128, dim))
     self.fill = 0
+    self._data = None
     self.allocate(128)
 
   def allocate(self, length):
@@ -95,7 +95,10 @@ class NumpyVectorsContainer(ArrayContainer):
 
   @property
   def data(self):
-    return self._data[:self.fill * self.dim]
+    if self._data is not None:
+      return self._data[:self.fill * self.dim]
+    else:
+      return None 
 
   @property
   def capacity(self):
@@ -105,7 +108,8 @@ class NumpyVectorsContainer(ArrayContainer):
     """Change the length of the data to `length`."""
     # Data array is filled and we have to increase the size.
     new_data = scipy.empty(length * self.dim)
-    new_data[:self.fill * self.dim] = self.data.ravel()
+    if self._data is not None:
+      new_data[:self.fill * self.dim] = self.data.ravel()
     self._data = new_data
 
 
