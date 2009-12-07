@@ -12,6 +12,15 @@ import struct
 import tempfile
 import threading
 
+try: 
+  import multiprocessing # For python 2.6
+except ImportError:
+  try:
+    import pyprocessing as multiprocessing # For python < 2.5
+  except ImportError:
+    # Fail silently.
+    pass
+
 import scipy
 from scipy.io.numpyio import fread, fwrite
 
@@ -45,48 +54,59 @@ class Container(object):
       yield self[i]
 
 
-class NumpyVectorsContainer(Container):
+class ArrayContainer(Container):
+  """Abstract class that is used to implement containers accessing their items 
+  via serialized (= 1 dimensional) arrays."""
+
+  @property
+  def capacity(self):
+    raise NotImplemented("Must be implemented by subclass.")
+
+  def __init__(self, dim):
+    self.dim = dim
+    self._data = scipy.empty((128, dim))
+    self.fill = 0
+    self.allocate(128)
+
+  def allocate(self, length):
+    raise NotImplemented("Must be implemented by subclass.")
+
+  def __getitem__(self, idx):
+    if idx >= self.fill:
+      raise IndexError("Container index out of range.")
+    return self._data[idx * self.dim:(idx + 1) * self.dim]
+
+  def append(self, item):
+    """Append an item to the container."""
+    if self.freeRows() <= 0:
+      self.allocate(self.capacity * 2)
+    self._data[self.fill * self.dim:(self.fill + 1) * self.dim] = item
+    self.fill += 1
+
+  def finalize(self):
+    """Free any superfluous memory."""
+    self.allocate(self.fill)
+
+  def freeRows(self):
+    return max(self.capacity - self.fill, 0)
+
+
+class NumpyVectorsContainer(ArrayContainer):
 
   @property
   def data(self):
-    return self._data[:self.fill]
+    return self._data[:self.fill * self.dim]
 
   @property
   def capacity(self):
     return self._data.shape[0]
 
-  def __init__(self, dim):
-    """Create a NumpyVectorsContainer object.
-
-    `dim` specifies the dimensionality of every item and has to equal for
-    each."""
-    self.dim = dim
-    self._data = scipy.empty((128, dim))
-    self.fill = 0
-
-  def __getitem__(self, idx):
-    return self.data[idx]
-
-  def changeLength(self, length):
+  def allocate(self, length):
     """Change the length of the data to `length`."""
     # Data array is filled and we have to increase the size.
-    new_data = scipy.empty((length, self.dim))
-    new_data[:self.fill] = self.data
+    new_data = scipy.empty(length * self.dim)
+    new_data[:self.fill * self.dim] = self.data.ravel()
     self._data = new_data
-    
-  def append(self, item):
-    """Append an item to the container."""
-    if self.freeRows() <= 0:
-      self.changeLength(self.capacity * 2)
-    self._data[self.fill][:] = item
-    self.fill += 1
-
-  def finalize(self):
-    """Free any superfluous memory."""
-    self.changeLength(self.fill)
-
-  def freeRows(self):
-    return max(self.capacity - self.fill, 0)
 
 
 class NumpyScalarsContainer(NumpyVectorsContainer):
@@ -98,8 +118,8 @@ class NumpyScalarsContainer(NumpyVectorsContainer):
   def append(self, item):
     """Append a scalar to the container."""
     if self.freeRows() <= self.capacity:
-      self.changeLength(self.capacity)
-    self._data[self.fill] = item
+      self.allocate(self.capacity)
+    self._data[self.fill * self.dim:(self.fill + 1) * self.dim] = item
     self.fill += 1
 
 
@@ -116,14 +136,22 @@ class NumpySequencesContainer(NumpyVectorsContainer):
       stop = self.sequenceStarts[idx + 1]
     except IndexError:
       stop = self.fill
-    return self.data[start:stop]
+
+    start *= self.dim
+    stop *= self.dim
+
+    res = self.data[start:stop].ravel()
+    res.shape = res.shape[0] / self.dim, self.dim
+    return res
 
   def append(self, sequence):
     """Append a sequence to the container."""
     seqlength = len(sequence)
+    sequence = scipy.asarray(sequence)
     while self.freeRows() < seqlength:
-      self.changeLength(self.capacity * 2)
-    self._data[self.fill:self.fill + seqlength] = sequence
+      self.allocate(self.capacity * 2)
+    self._data[self.fill * self.dim:(self.fill + seqlength) * self.dim] = \
+        sequence.ravel()
     self.sequenceStarts.append(self.fill)
     self.fill += seqlength
 
@@ -261,6 +289,13 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
     self.sequenceToFiles.append(fileidx)
     self.sequenceToLengths.append(item.shape[0])
     self.fileToSequences[fileidx].append(len(self.sequenceToFiles) - 1)
+
+
+class SharedVectorsContainer(Container):
+  pass
+
+
+
 
 
 containerRegistry = {
