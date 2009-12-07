@@ -167,14 +167,13 @@ class ExternalVectorsContainer(Container):
         os.remove(f)
 
   def __getitem__(self, idx):
+    self._cur_fd.flush()
     # Determine the file the vector resides in.
     fileidx, offset = divmod(idx, self.itemsPerFile)
     filename = self.files[fileidx]
-    if filename != self._cur_filename:
-      self._cur_fd = open(filename)
-      self._cur_filename = filename
-    self._cur_fd.seek(offset * self.doublesize)
-    item = fread(self._cur_fd, self.dim, 'd')
+    with open(filename) as fd:
+      fd.seek(offset * self.doublesize)
+      item = fread(fd, self.dim, 'd')
     return item
 
   def close(self):
@@ -239,16 +238,16 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
   def __getitem__(self, idx):
     fileidx = self.sequenceToFiles[idx]
     filename = self.files[fileidx]
-    with open(filename, 'r') as fp:
+    with open(filename) as fd:
       # Determine the indexes of the files that are in the same file before this
       # sequence.
       precedSeqs = [i for i in self.fileToSequences[fileidx] if i < idx]
       # Calculate the offset in the file.
       seq_offset = sum(self.sequenceToLengths[i] * self.dim for i in precedSeqs)
       # Seek to that offset...
-      fp.seek(self.doublesize * seq_offset)
+      fd.seek(self.doublesize * seq_offset)
       # ... and return the corresponding sequence.
-      res = fread(fp, self.sequenceToLengths[idx] * self.dim, 'd')
+      res = fread(fd, self.sequenceToLengths[idx] * self.dim, 'd')
     res.shape = res.size / self.dim, self.dim
 
     return res
@@ -256,7 +255,7 @@ class ExternalSequencesContainer(ExternalVectorsContainer):
   def append(self, item):
     item = scipy.asarray(item, dtype='float64')
     fd = self.fileForAppend(item.size)
-    fwrite(fd, self.dim, item)
+    fwrite(fd, item.size, item)
 
     fileidx = len(self.files) - 1
     self.sequenceToFiles.append(fileidx)
