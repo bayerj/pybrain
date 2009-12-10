@@ -1,14 +1,20 @@
 __author__ = 'Daan Wierstra and Tom Schaul'
 
-from scipy import dot, argmax
+
+import sys
+import itertools
+import Queue 
 from random import shuffle
+
+import scipy
+from scipy import dot, argmax
 
 
 try: 
-  import multiprocessing # For python 2.6
+  import multiprocessing as mp# For python 2.6
 except ImportError:
   try:
-    import pyprocessing # For python < 2.5
+    import pyprocessing as mp# For python < 2.5
   except ImportError:
     # Fail silently.
     pass
@@ -258,18 +264,129 @@ class BackpropTrainer(Trainer):
         return trainingErrors, validationErrors
 
 
+class DerivWorker(mp.Process):
+
+  def __init__(self, module, dataset, queue, conn):
+    self.module = module
+    self.dataset = dataset
+    self.queue = queue
+    self.conn = conn
+    super(DerivWorker, self).__init__()
+
+  def run(self):
+    while True:
+      # Busy-wait until new parameters have arrived.
+      while not self.conn.poll(0.1):
+        pass
+      packed = self.conn.recv()
+
+      # Break main loop if 'finished' is being sent. 
+      if packed == 'finished':
+        break 
+
+      # Otherwise trust other side that it's an array with new parameters.
+      self.module.params[:] = packed 
+
+      # Work.
+      allderivs = []
+      while True:
+        try:
+          jobs = self.queue.get(False)
+        except Queue.Empty, e:
+          break
+        derivs = [calcDeriv(self.module, self.dataset[i]) for i in jobs]
+        allderivs += derivs
+        self.queue.task_done()
+      self.conn.send(allderivs)
+
+
+def calcDeriv(module, seq):
+  # TODO: Copypasted from above. Should be factored out. This is actually a
+  # dangerous piece of code, since it seems very similar to the above -
+  # however, there are some differences: eg derivs are cleared before new
+  # calculations, and also returned.
+  seq = zip(*seq)
+  module.reset()     
+
+  for sample in seq:
+      module.activate(sample[0])
+  error = 0
+  ponderation = 0.
+  for offset, sample in reversed(list(enumerate(seq))):
+      # need to make a distinction here between datasets containing
+      # importance, and others
+      target = sample[1]
+      outerr = target - module.outputbuffer[offset]
+      if len(sample) > 2:
+          importance = sample[2]
+          error += 0.5 * dot(importance, outerr ** 2)
+          ponderation += sum(importance)
+          module.backActivate(outerr * importance)                
+      else:
+          error += 0.5 * sum(outerr ** 2)
+          ponderation += len(target)
+          # FIXME: the next line keeps arac from producing NaNs. I don't
+          # know why that is, but somehow the __str__ method of the 
+          # ndarray class fixes something,
+          str(outerr)
+          module.backActivate(outerr)
+      
+  return error, ponderation, module.derivs.copy()
+  
+
 class ParallelBackpropTrainer(BackpropTrainer):
 
-    def __init__(self, network, dataset, processes=None):
-        super(ParallelBackpropTrainer, self).__init__(network, dataset)
-        self.pool = multiprocessing.Pool(processes)
-    
-    def _calcDerivs(self, network, dataset, indexes):
-      pass
+    def __init__(self, network, dataset, numProcesses=None):
+      super(ParallelBackpropTrainer, self).__init__(network, dataset)
+      self.numProcesses = numProcesses if numProcesses else mp.cpu_count()
+      self._initPool()
+
+    def _initPool(self):
+      # Initialize working state for other processes.
+      conns = [mp.Pipe() for _ in range(self.numProcesses)]
+      self.conns = [j for i, j in conns]
+      self.queue = mp.JoinableQueue()
+      self.pool = [DerivWorker(self.module, self.ds, self.queue, c) 
+                   for c, _ in conns]
+      for p in self.pool:
+        p.start()
         
     def train(self):
-      pass
-        
+      # Distribute current parameters.
+      sys.stdout.flush()
 
+      # Distribute jobs. Do this first, to make sure the queue is filled when
+      # the workers start working. (They first wait for parameters.)
+      distributed = 0
+      for i in xrange(len(self.ds)):
+        distributed += 1
+        self.queue.put([i])
 
+      # Send new params
+      for conn in self.conns:
+        conn.send(self.module.params.copy())
+      
+      self.queue.join()
+      
+      # Retrieve updates.
+      sys.stdout.flush()
 
+      results = []
+      error = 0
+      derivs = scipy.zeros(self.module.params.shape)
+      ponderation = 0
+      for conn in self.conns:
+        results += conn.recv()
+      
+      for e, p, d in results:
+        error += e
+        ponderation += p
+        derivs += d
+
+      self.module.params[:] = self.descent(derivs)
+      sys.stdout.flush()
+      return error / ponderation
+
+    def __del__(self):
+      for conn in self.conns:
+        conn.send('finished')
