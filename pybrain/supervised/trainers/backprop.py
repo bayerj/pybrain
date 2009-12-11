@@ -267,7 +267,7 @@ class BackpropTrainer(Trainer):
 class DerivWorker(mp.Process):
 
   def __init__(self, module, dataset, queue, conn):
-    self.module = module
+    self.module = module.convertToFastNetwork()
     self.dataset = dataset
     self.queue = queue
     self.conn = conn
