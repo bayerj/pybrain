@@ -288,19 +288,19 @@ class DerivWorker(mp.Process):
       self.module.params[:] = packed 
 
       # Work.
-      error = 0
-      ponderation = 0
-      derivs = scipy.zeros(self.module.params.shape)
+      error = []
+      ponderation = []
+      derivs = []
       while True:
         try:
-          jobs = self.queue.get(False)
+          jobs = self.queue.get(True, 0.1)
         except Queue.Empty, e:
           break
         for i in jobs:
           e, p, d = calcDeriv(self.module, self.dataset[i]) 
-          error += e
-          ponderation += p
-          derivs += d
+          error.append(e)
+          ponderation.append(p)
+          derivs.append(d)
         self.queue.task_done()
       self.conn.send((error, ponderation, derivs))
 
@@ -347,7 +347,7 @@ class ParallelBackpropTrainer(BackpropTrainer):
       self._initPool()
 
     def _initPool(self):
-      # Initialize working state for other processes.
+      """Initialize working state for other processes."""
       conns = [mp.Pipe() for _ in range(self.numProcesses)]
       self.conns = [j for i, j in conns]
       self.queue = mp.JoinableQueue()
@@ -355,17 +355,22 @@ class ParallelBackpropTrainer(BackpropTrainer):
                    for c, _ in conns]
       for p in self.pool:
         p.start()
+
+    def distList(self, lst, chunksize):
+      chunks, lastchunk = divmod(len(lst), chunksize)
+      if lastchunk:
+        chunks += 1
+      for i in xrange(chunks):
+        yield lst[i * chunksize:(i + 1) * chunksize]
         
-    def train(self):
+    def trainBatch(self, idxs):
       # Distribute jobs. Do this first, to make sure the queue is filled when
       # the workers start working. (They first wait for parameters.)
-      samples = len(self.ds)
-      # TODO: make this configurable.
-      n = 1000
-      jobs = xrange(len(self.ds))
-      groupsOfN = (itertools.islice(jobs, n) for _ in xrange(samples / n))
-      for i in groupsOfN:
-        self.queue.put(list(i))
+
+      jobs = list(self.distList(idxs, 1000))
+
+      for i in jobs:
+        self.queue.put(i)
 
       # Send new params
       for conn in self.conns:
@@ -377,21 +382,35 @@ class ParallelBackpropTrainer(BackpropTrainer):
       sys.stdout.flush()
 
       results = []
-      error = 0
-      derivs = scipy.zeros(self.module.params.shape)
-      ponderation = 0
       for conn in self.conns:
-        results += conn.recv()
-      
-      print results
-      print "=" * 20
-      for e, p, d in results:
-        error += e
-        ponderation += p
-        derivs += d
+        results.append(conn.recv())
 
-      self.module.params[:] = self.descent(derivs)
-      sys.stdout.flush()
+      return results
+
+    def train(self):
+      idxs = range(len(self.ds))
+      shuffle(idxs)
+      batchsize = 10000
+      nBatches, more = divmod(len(idxs), batchsize)
+      if more:
+        nBatches += 1
+      batches = [idxs[i * batchsize:(i + 1) * batchsize] 
+                 for i in xrange(nBatches)]
+
+      error = 0
+      ponderation = 0
+      for batch in batches:
+        results = self.trainBatch(batch)
+        derivs = scipy.zeros(self.module.params.shape)
+      
+        # TODO: derivs are just added here, there should be specific
+        # functionality.
+        for e, p, d in results:
+          error += sum(e)
+          ponderation += sum(p)
+          derivs += sum(d)
+        self.module.params[:] = self.descent(derivs)
+
       return error / ponderation
 
     def __del__(self):
