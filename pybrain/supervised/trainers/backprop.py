@@ -264,6 +264,40 @@ class BackpropTrainer(Trainer):
         return trainingErrors, validationErrors
 
 
+def calcDeriv(module, seq):
+  # TODO: Copypasted from above. Should be factored out. This is actually a
+  # dangerous piece of code, since it seems very similar to the above -
+  # however, there are some differences: eg derivs are cleared before new
+  # calculations, and also returned.
+  seq = zip(*seq)
+  module.reset()     
+
+  for sample in seq:
+      module.activate(sample[0])
+  error = 0
+  ponderation = 0.
+  for offset, sample in reversed(list(enumerate(seq))):
+      # need to make a distinction here between datasets containing
+      # importance, and others
+      target = sample[1]
+      outerr = target - module.outputbuffer[offset]
+      if len(sample) > 2:
+          importance = sample[2]
+          error += 0.5 * dot(importance, outerr ** 2)
+          ponderation += sum(importance)
+          module.backActivate(outerr * importance)                
+      else:
+          error += 0.5 * sum(outerr ** 2)
+          ponderation += len(target)
+          # FIXME: the next line keeps arac from producing NaNs. I don't
+          # know why that is, but somehow the __str__ method of the 
+          # ndarray class fixes something,
+          str(outerr)
+          module.backActivate(outerr)
+      
+  return error, ponderation, module.derivs.copy()
+
+
 class DerivWorker(mp.Process):
 
   def __init__(self, module, dataset, queue, conn):
@@ -303,48 +337,17 @@ class DerivWorker(mp.Process):
           derivs.append(d)
         self.queue.task_done()
       self.conn.send((error, ponderation, derivs))
-
-
-def calcDeriv(module, seq):
-  # TODO: Copypasted from above. Should be factored out. This is actually a
-  # dangerous piece of code, since it seems very similar to the above -
-  # however, there are some differences: eg derivs are cleared before new
-  # calculations, and also returned.
-  seq = zip(*seq)
-  module.reset()     
-
-  for sample in seq:
-      module.activate(sample[0])
-  error = 0
-  ponderation = 0.
-  for offset, sample in reversed(list(enumerate(seq))):
-      # need to make a distinction here between datasets containing
-      # importance, and others
-      target = sample[1]
-      outerr = target - module.outputbuffer[offset]
-      if len(sample) > 2:
-          importance = sample[2]
-          error += 0.5 * dot(importance, outerr ** 2)
-          ponderation += sum(importance)
-          module.backActivate(outerr * importance)                
-      else:
-          error += 0.5 * sum(outerr ** 2)
-          ponderation += len(target)
-          # FIXME: the next line keeps arac from producing NaNs. I don't
-          # know why that is, but somehow the __str__ method of the 
-          # ndarray class fixes something,
-          str(outerr)
-          module.backActivate(outerr)
-      
-  return error, ponderation, module.derivs.copy()
   
 
 class ParallelBackpropTrainer(BackpropTrainer):
 
-    def __init__(self, network, dataset, numProcesses=None):
+    def __init__(self, network, dataset, 
+                 numProcesses=None, jobsize=1000, batchsize=10000):
       super(ParallelBackpropTrainer, self).__init__(network, dataset)
       self.numProcesses = numProcesses if numProcesses else mp.cpu_count()
       self._initPool()
+      self.jobsize = jobsize
+      self.batchsize = batchsize
 
     def _initPool(self):
       """Initialize working state for other processes."""
@@ -367,7 +370,7 @@ class ParallelBackpropTrainer(BackpropTrainer):
       # Distribute jobs. Do this first, to make sure the queue is filled when
       # the workers start working. (They first wait for parameters.)
 
-      jobs = list(self.distList(idxs, 1000))
+      jobs = list(self.distList(idxs, self.jobsize))
 
       for i in jobs:
         self.queue.put(i)
@@ -376,21 +379,16 @@ class ParallelBackpropTrainer(BackpropTrainer):
       for conn in self.conns:
         conn.send(self.module.params.copy())
       
-      self.queue.join()
+      # Wait for jobs to finish.
+      self.queue.join()     
       
-      # Retrieve updates.
-      sys.stdout.flush()
-
-      results = []
       for conn in self.conns:
-        results.append(conn.recv())
-
-      return results
+        yield conn.recv()
 
     def train(self):
+      batchsize = self.batchsize
       idxs = range(len(self.ds))
       shuffle(idxs)
-      batchsize = 10000
       nBatches, more = divmod(len(idxs), batchsize)
       if more:
         nBatches += 1
