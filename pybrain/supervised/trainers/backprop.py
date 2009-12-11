@@ -288,16 +288,21 @@ class DerivWorker(mp.Process):
       self.module.params[:] = packed 
 
       # Work.
-      allderivs = []
+      error = 0
+      ponderation = 0
+      derivs = scipy.zeros(self.module.params.shape)
       while True:
         try:
           jobs = self.queue.get(False)
         except Queue.Empty, e:
           break
-        derivs = [calcDeriv(self.module, self.dataset[i]) for i in jobs]
-        allderivs += derivs
+        for i in jobs:
+          e, p, d = calcDeriv(self.module, self.dataset[i]) 
+          error += e
+          ponderation += p
+          derivs += d
         self.queue.task_done()
-      self.conn.send(allderivs)
+      self.conn.send((error, ponderation, derivs))
 
 
 def calcDeriv(module, seq):
@@ -352,15 +357,15 @@ class ParallelBackpropTrainer(BackpropTrainer):
         p.start()
         
     def train(self):
-      # Distribute current parameters.
-      sys.stdout.flush()
-
       # Distribute jobs. Do this first, to make sure the queue is filled when
       # the workers start working. (They first wait for parameters.)
-      distributed = 0
-      for i in xrange(len(self.ds)):
-        distributed += 1
-        self.queue.put([i])
+      samples = len(self.ds)
+      # TODO: make this configurable.
+      n = 1000
+      jobs = xrange(len(self.ds))
+      groupsOfN = (itertools.islice(jobs, n) for _ in xrange(samples / n))
+      for i in groupsOfN:
+        self.queue.put(list(i))
 
       # Send new params
       for conn in self.conns:
@@ -378,6 +383,8 @@ class ParallelBackpropTrainer(BackpropTrainer):
       for conn in self.conns:
         results += conn.recv()
       
+      print results
+      print "=" * 20
       for e, p, d in results:
         error += e
         ponderation += p
